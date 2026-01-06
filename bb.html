@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MoodBoard – Collaborative Whiteboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --accent: #22d3ee;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --card: #1f2937;      /* canvas background */
+      --danger: #ef4444;
+      --success: #22c55e;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: radial-gradient(1200px 600px at 20% 10%, #0b1220, var(--bg));
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100%;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 16px;
+      background: rgba(17, 24, 39, 0.65);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #1f2937;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .brand .logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: conic-gradient(from 200deg, #22d3ee, #8b5cf6, #22d3ee);
+      box-shadow: 0 0 16px rgba(34, 211, 238, 0.4);
+    }
+
+    .room {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+    }
+    .room input {
+      width: 140px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0b1220;
+      color: var(--text);
+    }
+    .room button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0b1220;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .room button.connected {
+      border-color: #14532d;
+      color: var(--success);
+    }
+    .error {
+      color: var(--danger);
+      font-size: 14px;
+      margin-left: 8px;
+    }
+
+    .stage {
+      display: none;  /* shown after successful join */
+      position: relative;
+      height: calc(100vh - 64px);
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: var(--card);
+      cursor: crosshair;
+    }
+
+    .toolbar {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--panel);
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border: 1px solid #334155;
+    }
+    .toolbar button {
+      padding: 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text);
+      background: #1f2937;
+    }
+    .toolbar button.active {
+      background: var(--accent);
+      color: black;
+      font-weight: 700;
+    }
+    .colors {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: 180px;
+    }
+    .color-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid white;
+      cursor: pointer;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="logo"></div>
+        MoodBoard
+      </div>
+      <div class="room">
+        <input id="roomId" type="text" placeholder="Room ID" />
+        <button id="joinBtn">Join</button>
+        <span id="errorMsg" class="error"></span>
+      </div>
+    </header>
+
+    <div class="stage">
+      <canvas id="board"></canvas>
+
+      <div class="toolbar">
+        <div class="row">
+          <button id="penBtn">Pen</button>
+          <button id="pencilBtn">Pencil</button>
+          <button id="eraserBtn">Eraser</button>
+        </div>
+
+        <div class="row">
+          <span class="label">Colors:</span>
+          <div class="colors">
+            <div class="color-btn" style="background:#ff3b30" data-color="#ff3b30"></div>
+            <div class="color-btn" style="background:#0a84ff" data-color="#0a84ff"></div>
+            <div class="color-btn" style="background:#30d158" data-color="#30d158"></div>
+            <div class="color-btn" style="background:#ffd60a" data-color="#ffd60a"></div>
+            <div class="color-btn" style="background:#ff9f0a" data-color="#ff9f0a"></div>
+            <div class="color-btn" style="background:#bf5af2" data-color="#bf5af2"></div>
+            <div class="color-btn" style="background:#ffffff" data-color="#ffffff"></div>
+            <div class="color-btn" style="background:#22d3ee" data-color="#22d3ee"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <span class="label">Size:</span>
+          <input id="sizeInput" type="range" min="1" max="24" value="6" />
+        </div>
+
+        <div class="row">
+          <button id="clearBtn">Clear board</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const joinBtn = document.getElementById("joinBtn");
+    const roomInput = document.getElementById("roomId");
+    const errorMsg = document.getElementById("errorMsg");
+    const stage = document.querySelector(".stage");
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+
+    const penBtn = document.getElementById("penBtn");
+    const pencilBtn = document.getElementById("pencilBtn");
+    const eraserBtn = document.getElementById("eraserBtn");
+    const colorBtns = document.querySelectorAll(".color-btn");
+    const clearBtn = document.getElementById("clearBtn");
+    const sizeInput = document.getElementById("sizeInput");
+
+    // Canvas sizing with DPI scaling
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = stage.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      canvas.style.width = rect.width + "px";
+      canvas.style.height = rect.height + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Fill background for eraser to match
+      ctx.fillStyle = getCanvasBg();
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    }
+    function getCanvasBg() {
+      // Must match CSS var(--card)
+      return "#1f2937";
+    }
+
+    // Tool state
+    let tool = "pen";        // pen | pencil | eraser
+    let color = "#ff3b30";   // default red
+    let size = 6;            // controlled by slider
+    let drawing = false;
+    let last = null;         // previous point
+
+    function setActiveTool(btn) {
+      [penBtn, pencilBtn, eraserBtn].forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    }
+
+    penBtn.addEventListener("click", () => {
+      tool = "pen";
+      setActiveTool(penBtn);
+      sizeInput.value = Math.max(6, sizeInput.value); // ensure reasonable size
+    });
+
+    pencilBtn.addEventListener("click", () => {
+      tool = "pencil";
+      setActiveTool(pencilBtn);
+      if (parseInt(sizeInput.value, 10) > 4) sizeInput.value = 2; // default thin
+    });
+
+    eraserBtn.addEventListener("click", () => {
+      tool = "eraser";
+      setActiveTool(eraserBtn);
+    });
+
+    colorBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        color = btn.dataset.color;
+      });
+    });
+
+    sizeInput.addEventListener("input", () => {
+      size = parseInt(sizeInput.value, 10);
+    });
+
+    function getStrokeSettings() {
+      if (tool === "pen") {
+        return { strokeStyle: color, lineWidth: Math.max(6, size), lineCap: "round", lineJoin: "round", globalCompositeOperation: "source-over" };
+      }
+      if (tool === "pencil") {
+        return { strokeStyle: color, lineWidth: Math.min(4, size), lineCap: "round", lineJoin: "round", globalCompositeOperation: "source-over" };
+      }
+      // Eraser uses destination-out for true erasing
+      return { strokeStyle: getCanvasBg(), lineWidth: Math.max(12, size), lineCap: "round", lineJoin: "round", globalCompositeOperation: "destination-out" };
+    }
+
+    function pointerPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      return { x, y };
+    }
+
+    function startDraw(e) {
+      drawing = true;
+      last = pointerPos(e);
+      drawLine(last, last); // dot to start
+    }
+
+    function moveDraw(e) {
+      if (!drawing) return;
+      const p = pointerPos(e);
+      drawLine(last, p);
+      last = p;
+    }
+
+    function endDraw() {
+      drawing = false;
+      last = null;
+      ctx.globalCompositeOperation = "source-over"; // reset after erasing
+    }
+
+    function drawLine(a, b) {
+      const s = getStrokeSettings();
+      ctx.strokeStyle = s.strokeStyle;
+      ctx.lineWidth = s.lineWidth;
+      ctx.lineCap = s.lineCap;
+      ctx.lineJoin = s.lineJoin;
+      ctx.globalCompositeOperation = s.globalCompositeOperation;
+
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    // Mouse events
+    canvas.addEventListener("mousedown", startDraw);
+    window.addEventListener("mouseup", endDraw);
+    canvas.addEventListener("mousemove", moveDraw);
+
+    // Touch events (for mobile)
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      startDraw(e.touches[0]);
+    }, { passive: false });
+    canvas.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      moveDraw(e.touches[0]);
+    }, { passive: false });
+    window.addEventListener("touchend", endDraw);
+
+    // Clear board
+    clearBtn.addEventListener("click", () => {
+      const rect = stage.getBoundingClientRect();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = getCanvasBg();
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    });
+
+    // Join logic
+    joinBtn.addEventListener("click", () => {
+      if (roomInput.value === "2020") {
+        errorMsg.textContent = "";
+        joinBtn.classList.add("connected");
+        joinBtn.textContent = "Connected";
+        stage.style.display = "block";
+        resizeCanvas(); // ensure canvas is ready after showing
+        setActiveTool(penBtn); // default to pen
+        sizeInput.value = 6;
+        size = 6;
+      } else {
+        errorMsg.textContent = "Invalid Room ID!";
+      }
+    });
+
+    // Initial sizing after DOM is ready
+    window.addEventListener("resize", () => {
+      if (stage.style.display === "block") resizeCanvas();
+    });
+  </script>
+</body>
+</html>
